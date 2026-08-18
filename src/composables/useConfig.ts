@@ -1,13 +1,13 @@
 import { ref } from 'vue';
-import { apiGet } from '@/services/api';
 
 export interface AppConfig {
   ref_lat: number;
   ref_lon: number;
 }
 
-// Le point de référence par défaut change rarement : on le met en cache au
-// niveau module pour éviter de le refetch à chaque montage de composant.
+const DEFAULT_REF_LAT = 48.8566;
+const DEFAULT_REF_LON = 2.3522;
+
 const config = ref<AppConfig | null>(null);
 const loading = ref(false);
 
@@ -17,7 +17,9 @@ export function useConfig() {
 
     loading.value = true;
     try {
-      config.value = await apiGet<AppConfig>('/config');
+      const ref_lat = Number(import.meta.env.VITE_REF_LAT ?? DEFAULT_REF_LAT);
+      const ref_lon = Number(import.meta.env.VITE_REF_LON ?? DEFAULT_REF_LON);
+      config.value = { ref_lat, ref_lon };
       return config.value;
     } finally {
       loading.value = false;

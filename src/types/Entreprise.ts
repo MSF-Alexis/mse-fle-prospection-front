@@ -1,54 +1,42 @@
 import type { Contact } from './Contact';
 import type { Note, StatutNote } from './Note';
 
-export interface Siege {
-  adresse?: string;
-  code_postal?: string;
-  commune?: string;
-  libelle_commune?: string;
-  departement?: string;
-  region?: string;
-  latitude?: string;
-  longitude?: string;
-  [key: string]: unknown;
+export interface EntrepriseRow {
+  siren: string;
+  nom_complet: string | null;
+  nom_raison_sociale: string | null;
+  sigle: string | null;
+  activite_principale: string | null;
+  code_postal: string | null;
+  commune: string | null;
+  departement: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  statut_prospection: StatutNote | string;
+  raw_data: Record<string, unknown>;
+  imported_at: string;
+  updated_at: string;
 }
 
-export interface Dirigeant {
-  nom?: string;
-  prenoms?: string;
-  denomination?: string;
-  qualite?: string;
-  type_dirigeant?: string;
-  [key: string]: unknown;
-}
-
-/**
- * Document entreprise tel que renvoyé par l'API : tous les champs bruts de
- * recherche-entreprises.api.gouv.fr + les champs de suivi ajoutés par l'outil.
- */
-export interface Entreprise {
+export interface Entreprise extends Record<string, unknown> {
   siren: string;
   nom_complet: string;
   nom_raison_sociale?: string;
   sigle?: string | null;
   activite_principale?: string;
-  section_activite_principale?: string;
-  tranche_effectif_salarie?: string;
-  categorie_entreprise?: string;
-  date_creation?: string;
-  etat_administratif?: string;
-  siege: Siege;
-  dirigeants?: Dirigeant[];
+  code_postal?: string | null;
+  commune?: string | null;
+  departement?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  siege?: Record<string, unknown>;
+  dirigeants?: Record<string, unknown>[];
 
-  // Champs de suivi ajoutés par l'outil de prospection
   contacts: Contact[];
   notes: Note[];
   statut_prospection?: StatutNote | string;
 
-  // Calculé à la volée par l'API (non stocké)
   distance_km?: number | null;
-
-  [key: string]: unknown;
 }
 
 export interface EntreprisesResponse {
