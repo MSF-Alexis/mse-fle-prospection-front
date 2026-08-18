@@ -32,7 +32,7 @@ export function useEntreprise() {
   const entreprise = ref<Entreprise | null>(null);
   const loading = ref(false);
   const error = ref<Error | null>(null);
-  const { config, fetchConfig } = useConfig();
+  const { fetchConfig } = useConfig();
 
   const fetchEntreprise = async (siren: string) => {
     loading.value = true;
@@ -52,7 +52,9 @@ export function useEntreprise() {
 
       const refConfig = await fetchConfig();
       const coords = getEntrepriseCoords(row);
-      const distance_km = coords ? distanceKm(refConfig.ref_lat, refConfig.ref_lon, coords.lat, coords.lon) : null;
+      const distance_km = coords
+        ? distanceKm(refConfig.ref_lat, refConfig.ref_lon, coords.lat, coords.lon)
+        : null;
 
       entreprise.value = {
         ...(row.raw_data ?? {}),
@@ -70,6 +72,8 @@ export function useEntreprise() {
         contacts: (contactRows ?? []).map(mapContactRow),
         notes: (noteRows ?? []).map(mapNoteRow),
         distance_km,
+        importedAt: row.imported_at,
+        updatedAt: row.updated_at,
       } as Entreprise;
 
       return entreprise.value;
