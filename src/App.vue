@@ -1,4 +1,15 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { useRouter } from 'vue-router';
+import { useAuth } from '@/composables/useAuth';
+
+const router = useRouter();
+const { user, signOut } = useAuth();
+
+async function onLogout() {
+  await signOut();
+  router.push('/login');
+}
+</script>
 
 <template>
   <div class="min-h-full">
@@ -12,6 +23,12 @@
           <RouterLink to="/" class="transition hover:text-blue-600" active-class="text-blue-600">
             Entreprises
           </RouterLink>
+          <template v-if="user">
+            <span class="hidden text-xs text-slate-400 sm:inline">{{ user.email }}</span>
+            <button type="button" class="transition hover:text-blue-600" @click="onLogout">
+              Déconnexion
+            </button>
+          </template>
         </nav>
       </div>
     </header>

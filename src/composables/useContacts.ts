@@ -1,6 +1,20 @@
 import { ref } from 'vue';
-import { apiDelete, apiPost, apiPut } from '@/services/api';
+import { supabase } from '@/config/supabase';
 import type { Contact, ContactInput } from '@/types/Contact';
+
+function mapContactRow(row: any): Contact {
+  return {
+    id: row.id,
+    nom: row.nom,
+    prenom: row.prenom ?? undefined,
+    poste: row.poste ?? undefined,
+    email: row.email ?? undefined,
+    telephone: row.telephone ?? undefined,
+    notes: row.notes ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at ?? undefined,
+  };
+}
 
 export function useContacts() {
   const loading = ref(false);
@@ -10,7 +24,14 @@ export function useContacts() {
     loading.value = true;
     error.value = null;
     try {
-      return await apiPost<Contact>(`/entreprises/${siren}/contacts`, input);
+      const { data, error: insertError } = await supabase
+        .from('contacts')
+        .insert({ entreprise_siren: siren, ...input })
+        .select()
+        .single();
+      if (insertError) throw insertError;
+      await touchEntreprise(siren);
+      return mapContactRow(data);
     } catch (err) {
       error.value = err as Error;
       throw err;
@@ -27,7 +48,16 @@ export function useContacts() {
     loading.value = true;
     error.value = null;
     try {
-      return await apiPut<Contact>(`/entreprises/${siren}/contacts/${contactId}`, input);
+      const { data, error: updateError } = await supabase
+        .from('contacts')
+        .update({ ...input, updated_at: new Date().toISOString() })
+        .eq('id', contactId)
+        .eq('entreprise_siren', siren)
+        .select()
+        .single();
+      if (updateError) throw updateError;
+      await touchEntreprise(siren);
+      return mapContactRow(data);
     } catch (err) {
       error.value = err as Error;
       throw err;
@@ -40,7 +70,13 @@ export function useContacts() {
     loading.value = true;
     error.value = null;
     try {
-      await apiDelete(`/entreprises/${siren}/contacts/${contactId}`);
+      const { error: deleteError } = await supabase
+        .from('contacts')
+        .delete()
+        .eq('id', contactId)
+        .eq('entreprise_siren', siren);
+      if (deleteError) throw deleteError;
+      await touchEntreprise(siren);
     } catch (err) {
       error.value = err as Error;
       throw err;
@@ -50,4 +86,8 @@ export function useContacts() {
   };
 
   return { loading, error, addContact, updateContact, deleteContact };
+}
+
+async function touchEntreprise(siren: string): Promise<void> {
+  await supabase.from('entreprises').update({ updated_at: new Date().toISOString() }).eq('siren', siren);
 }

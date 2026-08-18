@@ -1,6 +1,16 @@
 import { ref } from 'vue';
-import { apiDelete, apiPost } from '@/services/api';
+import { supabase } from '@/config/supabase';
 import type { Note, NoteInput } from '@/types/Note';
+
+function mapNoteRow(row: any): Note {
+  return {
+    id: row.id,
+    auteur: row.auteur ?? undefined,
+    contenu: row.contenu,
+    statut: row.statut ?? undefined,
+    createdAt: row.created_at,
+  };
+}
 
 export function useNotes() {
   const loading = ref(false);
@@ -10,7 +20,21 @@ export function useNotes() {
     loading.value = true;
     error.value = null;
     try {
-      return await apiPost<Note>(`/entreprises/${siren}/notes`, input);
+      const { data, error: insertError } = await supabase
+        .from('notes')
+        .insert({ entreprise_siren: siren, ...input })
+        .select()
+        .single();
+      if (insertError) throw insertError;
+
+      if (input.statut) {
+        await supabase
+          .from('entreprises')
+          .update({ statut_prospection: input.statut, updated_at: new Date().toISOString() })
+          .eq('siren', siren);
+      }
+
+      return mapNoteRow(data);
     } catch (err) {
       error.value = err as Error;
       throw err;
@@ -23,7 +47,12 @@ export function useNotes() {
     loading.value = true;
     error.value = null;
     try {
-      await apiDelete(`/entreprises/${siren}/notes/${noteId}`);
+      const { error: deleteError } = await supabase
+        .from('notes')
+        .delete()
+        .eq('id', noteId)
+        .eq('entreprise_siren', siren);
+      if (deleteError) throw deleteError;
     } catch (err) {
       error.value = err as Error;
       throw err;
