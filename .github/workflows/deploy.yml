@@ -32,6 +32,8 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_REF_LAT: ${{ secrets.VITE_REF_LAT || vars.VITE_REF_LAT }}
+          VITE_REF_LON: ${{ secrets.VITE_REF_LON || vars.VITE_REF_LON }}
 
       - name: Verifier que les variables sont bien injectees
         run: |
@@ -42,6 +44,8 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL || vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY || vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_REF_LAT: ${{ secrets.VITE_REF_LAT || vars.VITE_REF_LAT }}
+          VITE_REF_LON: ${{ secrets.VITE_REF_LON || vars.VITE_REF_LON }}
 
       - name: SPA fallback (404.html)
         run: cp dist/index.html dist/404.html
