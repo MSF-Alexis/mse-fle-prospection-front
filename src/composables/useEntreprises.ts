@@ -3,27 +3,6 @@ import { supabase } from '@/config/supabase';
 import { distanceKm, getEntrepriseCoords } from '@/utils/geo';
 import type { Entreprise, EntreprisesQuery, EntreprisesResponse } from '@/types/Entreprise';
 
-function mapRow(row: any, contacts: any[] = [], notes: any[] = []): Entreprise {
-  return {
-    ...(row.raw_data ?? {}),
-    siren: row.siren,
-    nom_complet: row.nom_complet,
-    nom_raison_sociale: row.nom_raison_sociale,
-    sigle: row.sigle,
-    activite_principale: row.activite_principale,
-    code_postal: row.code_postal,
-    commune: row.commune,
-    departement: row.departement,
-    latitude: row.latitude,
-    longitude: row.longitude,
-    statut_prospection: row.statut_prospection,
-    contacts: contacts.map(mapContactRow),
-    notes: notes.map(mapNoteRow),
-    importedAt: row.imported_at,
-    updatedAt: row.updated_at,
-  } as Entreprise;
-}
-
 function mapContactRow(row: any) {
   return {
     id: row.id,
@@ -48,6 +27,37 @@ function mapNoteRow(row: any) {
   };
 }
 
+function mapEntrepriseRow(row: any, contacts: any[] = [], notes: any[] = []): Entreprise {
+  return {
+    ...(row.raw_data ?? {}),
+    siren: row.siren,
+    nom_complet: row.nom_complet,
+    nom_raison_sociale: row.nom_raison_sociale,
+    sigle: row.sigle,
+    activite_principale: row.activite_principale,
+    code_postal: row.code_postal,
+    commune: row.commune,
+    departement: row.departement,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    statut_prospection: row.statut_prospection,
+    contacts: contacts.map(mapContactRow),
+    notes: notes.map(mapNoteRow),
+    importedAt: row.imported_at,
+    updatedAt: row.updated_at,
+  } as Entreprise;
+}
+
+function groupBySiren(rows: any[]): Map<string, any[]> {
+  const map = new Map<string, any[]>();
+  for (const row of rows) {
+    const list = map.get(row.entreprise_siren) ?? [];
+    list.push(row);
+    map.set(row.entreprise_siren, list);
+  }
+  return map;
+}
+
 export function useEntreprises() {
   const results = ref<Entreprise[]>([]);
   const total = ref(0);
@@ -63,7 +73,16 @@ export function useEntreprises() {
     error.value = null;
 
     try {
-      let request = supabase.from('entreprises').select('*');
+      const currentPage = Math.max(1, query.page ?? 1);
+      const limit = Math.min(100, Math.max(1, query.limit ?? 20));
+      const from = (currentPage - 1) * limit;
+      const to = from + limit - 1;
+
+      let request = supabase
+        .from('entreprises')
+        .select('*', { count: 'exact' })
+        .order('nom_complet', { ascending: true })
+        .range(from, to);
 
       if (query.q) {
         const q = query.q;
@@ -82,7 +101,7 @@ export function useEntreprises() {
       if (query.activite) request = request.eq('activite_principale', query.activite);
       if (query.statut) request = request.eq('statut_prospection', query.statut);
 
-      const { data: rows, error: fetchError } = await request;
+      const { data: rows, error: fetchError, count } = await request;
       if (fetchError) throw fetchError;
 
       const sirens = (rows ?? []).map((r: any) => r.siren);
@@ -98,46 +117,43 @@ export function useEntreprises() {
       const contactsBySiren = groupBySiren(contactRows ?? []);
       const notesBySiren = groupBySiren(noteRows ?? []);
 
-      const entreprises = (rows ?? []).map((row: any) =>
-        mapRow(row, contactsBySiren.get(row.siren) ?? [], notesBySiren.get(row.siren) ?? []),
-      );
-
       const refLatValue = query.ref_lat ?? 48.8566;
       const refLonValue = query.ref_lon ?? 2.3522;
 
-      const withDistance = entreprises.map((entreprise) => {
+      let entreprises = (rows ?? []).map((row: any) => {
+        const entreprise = mapEntrepriseRow(
+          row,
+          contactsBySiren.get(row.siren) ?? [],
+          notesBySiren.get(row.siren) ?? [],
+        );
         const coords = getEntrepriseCoords(entreprise);
         const distance_km = coords ? distanceKm(refLatValue, refLonValue, coords.lat, coords.lon) : null;
         return { ...entreprise, distance_km };
       });
 
-      const filteredByDistance =
-        query.distance_max !== undefined && !Number.isNaN(query.distance_max)
-          ? withDistance.filter((e) => e.distance_km !== null && e.distance_km <= query.distance_max!)
-          : withDistance;
+      if (query.distance_max !== undefined && !Number.isNaN(query.distance_max)) {
+        entreprises = entreprises.filter(
+          (e) => e.distance_km !== null && e.distance_km <= query.distance_max!,
+        );
+      }
 
-      const sorted = [...filteredByDistance].sort((a, b) => {
-        if (query.sort === 'distance') {
+      if (query.sort === 'distance') {
+        entreprises = [...entreprises].sort((a, b) => {
           if (a.distance_km === null) return 1;
           if (b.distance_km === null) return -1;
           return a.distance_km - b.distance_km;
-        }
-        return String(a.nom_complet ?? '').localeCompare(String(b.nom_complet ?? ''));
-      });
+        });
+      }
 
-      const currentPage = Math.max(1, query.page ?? 1);
-      const limit = Math.min(100, Math.max(1, query.limit ?? 20));
-      const totalCount = sorted.length;
-      const pageResults = sorted.slice((currentPage - 1) * limit, (currentPage - 1) * limit + limit);
-
+      const serverTotal = count ?? 0;
       const response: EntreprisesResponse = {
-        total: totalCount,
+        total: serverTotal,
         page: currentPage,
         limit,
-        total_pages: Math.max(1, Math.ceil(totalCount / limit)),
+        total_pages: Math.max(1, Math.ceil(serverTotal / limit)),
         ref_lat: refLatValue,
         ref_lon: refLonValue,
-        results: pageResults,
+        results: entreprises,
       };
 
       results.value = response.results;
@@ -157,14 +173,4 @@ export function useEntreprises() {
   };
 
   return { results, total, page, totalPages, refLat, refLon, loading, error, search };
-}
-
-function groupBySiren(rows: any[]): Map<string, any[]> {
-  const map = new Map<string, any[]>();
-  for (const row of rows) {
-    const list = map.get(row.entreprise_siren) ?? [];
-    list.push(row);
-    map.set(row.entreprise_siren, list);
-  }
-  return map;
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import Loader from '@/components/ui/Loader.vue';
 import EmptyState from '@/components/ui/EmptyState.vue';
@@ -24,6 +24,25 @@ const { deleteNote } = useNotes();
 const showContactModal = ref(false);
 const editingContact = ref<Contact | null>(null);
 const showNoteModal = ref(false);
+
+const financeYears = computed(() => {
+  const entries = Object.entries(entreprise.value?.finances ?? {});
+  return entries.sort(([a], [b]) => Number(b) - Number(a));
+});
+
+const activeFlags = computed(() => {
+  const complements = entreprise.value?.complements ?? {};
+  const labels: Array<[string, boolean | undefined]> = [
+    ['ESS', complements.est_ess],
+    ['RGE', complements.est_rge],
+    ['Qualiopi', complements.est_qualiopi],
+    ['Organisme de formation', complements.est_organisme_formation],
+    ['Association', complements.est_association],
+    ['Administration', complements.est_administration],
+    ['FINESS', complements.est_finess],
+  ];
+  return labels.filter(([, enabled]) => Boolean(enabled)).map(([label]) => label);
+});
 
 function openAddContact() {
   editingContact.value = null;
@@ -66,7 +85,7 @@ onMounted(() => fetchEntreprise(siren));
 </script>
 
 <template>
-  <main class="mx-auto max-w-4xl px-4 py-6 sm:px-6">
+  <main class="mx-auto max-w-5xl px-4 py-6 sm:px-6">
     <RouterLink to="/" class="mb-4 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-blue-600">
       ← Retour à la liste
     </RouterLink>
@@ -119,6 +138,123 @@ onMounted(() => fetchEntreprise(siren));
           </select>
         </div>
       </header>
+
+      <section class="mt-6 grid gap-4 md:grid-cols-2">
+        <article class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 class="mb-3 text-sm font-semibold text-slate-700">Informations générales</h2>
+          <dl class="grid grid-cols-[150px_1fr] gap-y-2 text-sm">
+            <dt class="text-slate-500">Raison sociale</dt>
+            <dd>{{ entreprise.nom_raison_sociale || '—' }}</dd>
+            <dt class="text-slate-500">Catégorie</dt>
+            <dd>{{ entreprise.categorie_entreprise || '—' }}</dd>
+            <dt class="text-slate-500">Effectif</dt>
+            <dd>{{ entreprise.tranche_effectif_salarie || '—' }}</dd>
+            <dt class="text-slate-500">Section NAF</dt>
+            <dd>{{ entreprise.section_activite_principale || '—' }}</dd>
+            <dt class="text-slate-500">Nature juridique</dt>
+            <dd>{{ entreprise.nature_juridique || '—' }}</dd>
+            <dt class="text-slate-500">État administratif</dt>
+            <dd>{{ entreprise.etat_administratif || '—' }}</dd>
+            <dt class="text-slate-500">Date de création</dt>
+            <dd>{{ entreprise.date_creation || '—' }}</dd>
+            <dt class="text-slate-500">Date de fermeture</dt>
+            <dd>{{ entreprise.date_fermeture || '—' }}</dd>
+            <dt class="text-slate-500">Établissements</dt>
+            <dd>
+              {{ entreprise.nombre_etablissements ?? '—' }}
+              <span v-if="entreprise.nombre_etablissements_ouverts !== undefined && entreprise.nombre_etablissements_ouverts !== null">
+                ({{ entreprise.nombre_etablissements_ouverts }} ouverts)
+              </span>
+            </dd>
+            <dt class="text-slate-500">TVA</dt>
+            <dd>{{ entreprise.tva?.join(', ') || '—' }}</dd>
+          </dl>
+        </article>
+
+        <article class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 class="mb-3 text-sm font-semibold text-slate-700">Siège</h2>
+          <dl class="grid grid-cols-[150px_1fr] gap-y-2 text-sm">
+            <dt class="text-slate-500">Adresse</dt>
+            <dd>{{ entreprise.siege?.adresse || '—' }}</dd>
+            <dt class="text-slate-500">Commune</dt>
+            <dd>{{ entreprise.siege?.libelle_commune || entreprise.commune || '—' }}</dd>
+            <dt class="text-slate-500">Code postal</dt>
+            <dd>{{ entreprise.siege?.code_postal || entreprise.code_postal || '—' }}</dd>
+            <dt class="text-slate-500">Département</dt>
+            <dd>{{ entreprise.siege?.departement || entreprise.departement || '—' }}</dd>
+            <dt class="text-slate-500">Région</dt>
+            <dd>{{ entreprise.siege?.region || '—' }}</dd>
+            <dt class="text-slate-500">SIRET siège</dt>
+            <dd>{{ entreprise.siege?.siret || '—' }}</dd>
+            <dt class="text-slate-500">Date début activité</dt>
+            <dd>{{ entreprise.siege?.date_debut_activite || '—' }}</dd>
+            <dt class="text-slate-500">Nom commercial</dt>
+            <dd>{{ entreprise.siege?.nom_commercial || '—' }}</dd>
+          </dl>
+        </article>
+      </section>
+
+      <section class="mt-6 grid gap-4 md:grid-cols-2">
+        <article class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 class="mb-3 text-sm font-semibold text-slate-700">Dirigeants</h2>
+          <EmptyState v-if="!entreprise.dirigeants?.length" title="Aucun dirigeant remonté" />
+          <div v-else class="flex flex-col gap-2">
+            <div v-for="(dirigeant, index) in entreprise.dirigeants" :key="index" class="rounded-lg border border-slate-100 bg-slate-50 p-3 text-sm">
+              <p class="font-medium text-slate-800">
+                {{ dirigeant.denomination || [dirigeant.prenoms, dirigeant.nom].filter(Boolean).join(' ') || '—' }}
+              </p>
+              <p class="text-slate-500">{{ dirigeant.qualite || 'Qualité non renseignée' }}</p>
+              <p class="mt-1 text-xs text-slate-400">
+                {{ dirigeant.type_dirigeant || '—' }}
+                <span v-if="dirigeant.annee_de_naissance">· Né(e) en {{ dirigeant.annee_de_naissance }}</span>
+                <span v-if="dirigeant.siren">· SIREN {{ dirigeant.siren }}</span>
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <article class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 class="mb-3 text-sm font-semibold text-slate-700">Indicateurs & labels</h2>
+          <div class="flex flex-wrap gap-2">
+            <span
+              v-for="flag in activeFlags"
+              :key="flag"
+              class="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
+            >
+              {{ flag }}
+            </span>
+            <span v-if="activeFlags.length === 0" class="text-sm text-slate-500">Aucun indicateur spécifique remonté.</span>
+          </div>
+
+          <div class="mt-4 text-sm text-slate-600">
+            <p>IDCC : {{ entreprise.complements?.liste_idcc?.join(', ') || '—' }}</p>
+            <p>FINESS juridique : {{ entreprise.complements?.liste_finess_juridique?.join(', ') || '—' }}</p>
+          </div>
+        </article>
+      </section>
+
+      <section class="mt-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <h2 class="mb-3 text-sm font-semibold text-slate-700">Finances</h2>
+        <EmptyState v-if="financeYears.length === 0" title="Aucune donnée financière remontée" />
+        <div v-else class="overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead>
+              <tr class="border-b border-slate-100 text-left text-slate-500">
+                <th class="px-2 py-2 font-medium">Année</th>
+                <th class="px-2 py-2 font-medium">Chiffre d'affaires</th>
+                <th class="px-2 py-2 font-medium">Résultat net</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="([year, values]) in financeYears" :key="year" class="border-b border-slate-50">
+                <td class="px-2 py-2 font-medium text-slate-800">{{ year }}</td>
+                <td class="px-2 py-2">{{ values.ca?.toLocaleString('fr-FR') ?? '—' }}</td>
+                <td class="px-2 py-2">{{ values.resultat_net?.toLocaleString('fr-FR') ?? '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section class="mt-6">
         <div class="mb-3 flex items-center justify-between">
