@@ -1,6 +1,5 @@
 import { ref } from 'vue';
 import { supabase } from '@/config/supabase';
-import { distanceKm, getEntrepriseCoords } from '@/utils/geo';
 import type { Entreprise, EntreprisesQuery, EntreprisesResponse } from '@/types/Entreprise';
 
 function mapContactRow(row: any) {
@@ -27,7 +26,7 @@ function mapNoteRow(row: any) {
   };
 }
 
-function mapEntrepriseRow(row: any, contacts: any[] = [], notes: any[] = []): Entreprise {
+function mapRpcRow(row: any, contacts: any[] = [], notes: any[] = []): Entreprise {
   return {
     ...(row.raw_data ?? {}),
     siren: row.siren,
@@ -43,6 +42,7 @@ function mapEntrepriseRow(row: any, contacts: any[] = [], notes: any[] = []): En
     statut_prospection: row.statut_prospection,
     contacts: contacts.map(mapContactRow),
     notes: notes.map(mapNoteRow),
+    distance_km: row.distance_km ?? null,
     importedAt: row.imported_at,
     updatedAt: row.updated_at,
   } as Entreprise;
@@ -75,34 +75,25 @@ export function useEntreprises() {
     try {
       const currentPage = Math.max(1, query.page ?? 1);
       const limit = Math.min(100, Math.max(1, query.limit ?? 20));
-      const from = (currentPage - 1) * limit;
-      const to = from + limit - 1;
+      const refLatValue = query.ref_lat ?? 48.8566;
+      const refLonValue = query.ref_lon ?? 2.3522;
 
-      let request = supabase
-        .from('entreprises')
-        .select('*', { count: 'exact' })
-        .order('nom_complet', { ascending: true })
-        .range(from, to);
+      // Pagination, filtres et distance sont calcules cote base via la
+      // fonction RPC search_entreprises (voir supabase/rpc_search_entreprises.sql).
+      const { data: rows, error: rpcError } = await supabase.rpc('search_entreprises', {
+        ref_lat: refLatValue,
+        ref_lon: refLonValue,
+        distance_max_km: query.distance_max ?? null,
+        q: query.q || null,
+        p_departement: query.departement || null,
+        p_activite: query.activite || null,
+        p_statut: query.statut || null,
+        sort_by: query.sort ?? 'nom',
+        page_num: currentPage,
+        page_size: limit,
+      });
 
-      if (query.q) {
-        const q = query.q;
-        request = request.or(
-          [
-            `nom_complet.ilike.%${q}%`,
-            `nom_raison_sociale.ilike.%${q}%`,
-            `sigle.ilike.%${q}%`,
-            `siren.ilike.%${q}%`,
-            `commune.ilike.%${q}%`,
-            `code_postal.ilike.%${q}%`,
-          ].join(','),
-        );
-      }
-      if (query.departement) request = request.eq('departement', query.departement);
-      if (query.activite) request = request.eq('activite_principale', query.activite);
-      if (query.statut) request = request.eq('statut_prospection', query.statut);
-
-      const { data: rows, error: fetchError, count } = await request;
-      if (fetchError) throw fetchError;
+      if (rpcError) throw rpcError;
 
       const sirens = (rows ?? []).map((r: any) => r.siren);
       const [{ data: contactRows }, { data: noteRows }] = await Promise.all([
@@ -117,35 +108,11 @@ export function useEntreprises() {
       const contactsBySiren = groupBySiren(contactRows ?? []);
       const notesBySiren = groupBySiren(noteRows ?? []);
 
-      const refLatValue = query.ref_lat ?? 48.8566;
-      const refLonValue = query.ref_lon ?? 2.3522;
+      const entreprises = (rows ?? []).map((row: any) =>
+        mapRpcRow(row, contactsBySiren.get(row.siren) ?? [], notesBySiren.get(row.siren) ?? []),
+      );
 
-      let entreprises = (rows ?? []).map((row: any) => {
-        const entreprise = mapEntrepriseRow(
-          row,
-          contactsBySiren.get(row.siren) ?? [],
-          notesBySiren.get(row.siren) ?? [],
-        );
-        const coords = getEntrepriseCoords(entreprise);
-        const distance_km = coords ? distanceKm(refLatValue, refLonValue, coords.lat, coords.lon) : null;
-        return { ...entreprise, distance_km };
-      });
-
-      if (query.distance_max !== undefined && !Number.isNaN(query.distance_max)) {
-        entreprises = entreprises.filter(
-          (e) => e.distance_km !== null && e.distance_km <= query.distance_max!,
-        );
-      }
-
-      if (query.sort === 'distance') {
-        entreprises = [...entreprises].sort((a, b) => {
-          if (a.distance_km === null) return 1;
-          if (b.distance_km === null) return -1;
-          return a.distance_km - b.distance_km;
-        });
-      }
-
-      const serverTotal = count ?? 0;
+      const serverTotal = rows?.[0]?.total_count ?? 0;
       const response: EntreprisesResponse = {
         total: serverTotal,
         page: currentPage,
